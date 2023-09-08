@@ -7,6 +7,7 @@ pip install 'dllogger @ git+https://github.com/NVIDIA/dllogger.git'
 pip install 'openfold @ git+https://github.com/aqlaboratory/openfold.git@4b41059694619831a7db195b7e0988fc4ff3a307'
 pip install pytorch_lightning==1.5.10
 pip install pydssp
+pip install ProDy
 git clone https://github.com/facebookresearch/esm.git
 cd esm
 pip install -e .
@@ -14,6 +15,6 @@ cd ..
 git clone https://github.com/deepmind/alphafold.git
 cd alphafold
 pip install -e .
-bash scripts/download_alphafold_params.sh
+bash scripts/download_alphafold_params.sh .
 cd ..
 pip install -e .
