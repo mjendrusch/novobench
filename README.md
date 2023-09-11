@@ -5,6 +5,16 @@ using AlphaFold2 and ESMfold following [1]. Given a set of designed protein
 backbones and corresponding FASTA-format sequences, it predicts the structures
 of each sequence and compares them to the designed backbone.
 
+### dependencies
+Before installing novobench, make sure you have the following installed:
+* GCC or clang
+* CUDA version 11.3 or later
+in case your machine / cluster is set up with a module system, you will probably be able to get these using
+```bash
+module load GCC
+module load CUDA
+```
+
 ### installation
 First, make sure `conda` is installed and create a conda environment:
 ```bash
