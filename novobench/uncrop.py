@@ -9,6 +9,8 @@ import numpy as np
 from alphafold.common.residue_constants import restypes
 from alphafold.common.protein import from_pdb_string, to_pdb, Protein
 
+from novobench.utils import listdir_nohidden
+
 INITIAL_GUESS = defaultdict(default_factory=lambda x: False, initial_guess=True)
 AF_MODELS = {
     f"af_{i}{mm}": f"model_{i}{mm}_ptm"
@@ -41,7 +43,7 @@ def prepare_data(pdb_path: str,
                  section_spec = None,
                  filter_design: Optional[int] = None,
                  homomer: Optional[int] = 1) -> Tuple[str, str, np.ndarray]:
-    pdb_files = sorted(os.listdir(pdb_path))
+    pdb_files = listdir_nohidden(pdb_path, extensions=("pdb", "pdb1"))
     if select_state is not None:
         tmp_pdb_files = pdb_files
         pdb_files = []
@@ -60,7 +62,7 @@ def prepare_data(pdb_path: str,
             residue_index = np.arange(sum(len(seq) for seq in sequences), dtype=np.int32)
             yield name, 0, sequence, residue_index, structure
     else:
-        fasta_files = sorted(os.listdir(fasta_path))
+        fasta_files = listdir_nohidden(fasta_path, extensions=("fa", "fasta"))
         if select_state is not None:
             assert all([".".join(x.split(".")[:-1]) == ".".join(y.split(".")[:-2]) for x, y in zip(fasta_files, pdb_files)])
         else:

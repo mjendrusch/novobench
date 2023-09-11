@@ -9,6 +9,8 @@ import numpy as np
 from alphafold.common.residue_constants import restypes
 from alphafold.common.protein import from_pdb_string, to_pdb, Protein
 
+from novobench.utils import listdir_nohidden
+
 INITIAL_GUESS = defaultdict(default_factory=lambda x: False, initial_guess=True)
 AF_MODELS = {
     f"af_{i}{mm}": f"model_{i}{mm}_ptm"
@@ -35,6 +37,7 @@ def runner(iterator,
     else:
         raise ValueError(f"Invalid model type. Given {model_type} but expected one of {MODEL_TYPES}.")
     for name, index, sequence, residue_index, structure in iterator:
+        print("SHAPES", sequence, structure.shape)
         scores = model(sequence, structure, residue_index,
                        initial_guess=prediction_mode == "guess",
                        templated=templated,
@@ -51,7 +54,7 @@ def prepare_data(pdb_path: str,
                  homomer: Optional[int] = 1,
                  slice_pdb: Optional[str] = "none") -> Tuple[str, str, np.ndarray]:
     slice_pdb = parse_slice(slice_pdb)
-    pdb_files = sorted(os.listdir(pdb_path))
+    pdb_files = listdir_nohidden(pdb_path, endings=("pdb", "pdb1"))
     # if we're selecting a state, that means that multi-state PDBs
     # are enabled, i.e. we're dealing with a multi-state design problem.
     # therefore, we will split pdb_files into 3 lists where each list
@@ -72,7 +75,7 @@ def prepare_data(pdb_path: str,
             sequence = chain_sequence(sequence, chain_index)
             yield name, 0, sequence, residue_index, structure
     else:
-        fasta_files = sorted(os.listdir(fasta_path))
+        fasta_files = listdir_nohidden(fasta_path, endings=("fa", "fasta"))
         if select_state is not None:
             assert all([".".join(x.split(".")[:-1]) == ".".join(y.split(".")[:-2]) for x, y in zip(fasta_files, pdb_files)])
         else:
