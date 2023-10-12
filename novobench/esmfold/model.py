@@ -17,8 +17,6 @@ class ESMScore:
         output = {k: v.to("cpu").numpy() for k, v in output.items()}
         output["positions"] = predicted
         mask = None
-        for name, tensor in output.items():
-            print(name, tensor.shape)
         if mask_loops:
             structured = (dssp_assign(predicted[:, :4])[..., :2] > 0).any(axis=-1)
             mask = structured

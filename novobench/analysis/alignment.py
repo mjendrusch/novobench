@@ -42,7 +42,6 @@ def permute(structure: np.ndarray[np.float32], mask, chain_index: np.ndarray[np.
     if len(unique) <= 1:
         yield structure, mask
     else:
-        print("PERMU", unique)
         for perm in itertools.permutations(unique):
             permutation_index = np.concatenate([
                 np.arange(start[i], end[i], dtype=np.int32)

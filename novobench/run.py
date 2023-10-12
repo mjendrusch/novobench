@@ -37,7 +37,6 @@ def runner(iterator,
     else:
         raise ValueError(f"Invalid model type. Given {model_type} but expected one of {MODEL_TYPES}.")
     for name, index, sequence, residue_index, structure in iterator:
-        print("SHAPES", sequence, structure.shape)
         scores = model(sequence, structure, residue_index,
                        initial_guess=prediction_mode == "guess",
                        templated=templated,
@@ -54,7 +53,7 @@ def prepare_data(pdb_path: str,
                  homomer: Optional[int] = 1,
                  slice_pdb: Optional[str] = "none") -> Tuple[str, str, np.ndarray]:
     slice_pdb = parse_slice(slice_pdb)
-    pdb_files = listdir_nohidden(pdb_path, endings=("pdb", "pdb1"))
+    pdb_files = listdir_nohidden(pdb_path, extensions=("pdb", "pdb1"))
     # if we're selecting a state, that means that multi-state PDBs
     # are enabled, i.e. we're dealing with a multi-state design problem.
     # therefore, we will split pdb_files into 3 lists where each list
@@ -75,7 +74,7 @@ def prepare_data(pdb_path: str,
             sequence = chain_sequence(sequence, chain_index)
             yield name, 0, sequence, residue_index, structure
     else:
-        fasta_files = listdir_nohidden(fasta_path, endings=("fa", "fasta"))
+        fasta_files = listdir_nohidden(fasta_path, extensions=("fa", "fasta"))
         if select_state is not None:
             assert all([".".join(x.split(".")[:-1]) == ".".join(y.split(".")[:-2]) for x, y in zip(fasta_files, pdb_files)])
         else:
@@ -184,6 +183,20 @@ def parse_section_spec(data):
         return int(x)
     spans = [[slice(*map(pseudo_int, span.split(":"))) for span in spec.split(",")] for spec in data.strip().split(";")]
     return spans
+
+def run_colab(out_path, pdb_path, fasta_path, parameter_path, num_recycles=4):
+    write_result_stream(out_path,
+                        runner(prepare_data(pdb_path, fasta_path,
+                                            fasta_prefix="",
+                                            fasta_suffix="",
+                                            select_state=None,
+                                            section_spec=parse_section_spec("none"),
+                                            homomer=1),
+                               model_type="af_1",
+                               parameter_path=parameter_path,
+                               prediction_mode="guess",
+                               templated=parse_templated("none"),
+                               num_recycles=num_recycles))
 
 if __name__ == "__main__":
     opt = parse_options(

@@ -28,7 +28,6 @@ class AlphaFoldModel(hk.Module):
 
     def __call__(self, batch):
         impl = AlphaFoldIteration(self.config, self.global_config)
-        print(batch['aatype'].shape)
         batch_size, num_residues = batch['aatype'].shape
 
         def get_prev(ret):
@@ -70,7 +69,6 @@ class AlphaFoldModel(hk.Module):
             prev['prev_pos'] = jnp.zeros(
                 [num_residues, residue_constants.atom_type_num, 3])
             if 'initial_guess' in batch:
-                print("IGUESS", batch['initial_guess'].shape)
                 prev['prev_pos'] = batch['initial_guess']
         if emb_config.recycle_features:
             prev['prev_msa_first_row'] = jnp.zeros(
@@ -184,14 +182,10 @@ class AlphaFoldScore:
             features["initial_guess"] = structure#[None, None]
         offset = [0]
         lengths = []
-        print(sequence)
         for seq in sequence.split(":"):
             offset.append(offset[-1] + len(seq) + 200)
             lengths.append(len(seq))
-        print(lengths)
-        print(offset)
         offset = jnp.repeat(jnp.array(offset[:-1]), jnp.array(lengths))
-        print(offset)
         features["residue_index"] = residue_index[None] + offset[None]
         templated_mask = jnp.ones_like(features["aatype"])[0]
         if templated is not None:
@@ -512,14 +506,10 @@ def make_template_features(sequences, structure, templated=None):
         template_pseudo_beta_mask=template_pseudo_beta_mask,
     )
 
-    for name, value in result.items():
-        print(name, value.shape)
-
     return result
 
 def make_uncrop_template_features(sequences, complex_indices, complex_structure, target_structure):
     sequences = [jnp.argmax(s, axis=-1) for s in sequences]
-    print(*[s.shape for s in sequences])
     aatype = []
     template_all_atom_positions = []
     template_all_atom_mask = []
@@ -534,7 +524,6 @@ def make_uncrop_template_features(sequences, complex_indices, complex_structure,
             complex_structure,
             make_atom14_masks([jax.nn.one_hot(s, 20, axis=-1) for s in sequences])["atom37_atom_exists"],
         )
-        print(complex_indices.shape, all_atom_mask.shape, all_atom.shape)
         all_atom = jnp.zeros((aatype.shape[1], 37, 3), dtype=jnp.float32).at[complex_indices].set(all_atom)
         all_atom_mask = jnp.zeros((aatype.shape[1], 37), dtype=jnp.float32).at[complex_indices].set(all_atom_mask[0, complex_indices])[None]
         cb_coordinates = pseudo_beta_fn(aatype, all_atom, None)
