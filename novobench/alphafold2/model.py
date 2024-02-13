@@ -16,7 +16,7 @@ from alphafold.model import config as afconfig
 from alphafold.model import data as afdata
 from alphafold.common import residue_constants
 from alphafold.model.modules import AlphaFoldIteration
-from alphafold.model.modules import pseudo_beta_fn
+# from alphafold.model.modules import pseudo_beta_fn
 from alphafold.model.prng import SafeKey
 from alphafold.model.utils import mask_mean
 
@@ -25,6 +25,33 @@ from novobench.analysis.alignment import compute_scores_permuted
 
 hk.vmap.require_split_rng = False
 
+def compute_pseudo_cb(positions):
+    n, ca, co = jnp.moveaxis(positions[..., :3, :], -2, 0)
+    b = ca - n
+    c = co - ca
+    a = jnp.cross(b, c)
+    const = [-0.58273431, 0.56802827, -0.54067466]
+    return const[0] * a + const[1] * b + const[2] * c + ca
+
+def pseudo_beta_fn(aatype, all_atom_positions, all_atom_masks):
+    """Create pseudo beta features."""
+
+    is_gly = jnp.equal(aatype, residue_constants.restype_order['G'])
+    ca_idx = residue_constants.atom_order['CA']
+    cb_idx = residue_constants.atom_order['CB']
+    has_cb = all_atom_masks[..., cb_idx]
+    ca_pos = all_atom_positions[..., ca_idx, :]
+    cb_pos = all_atom_positions[..., cb_idx, :]
+    cb_pos = jnp.where(
+        has_cb[..., None],
+        cb_pos,
+        compute_pseudo_cb(all_atom_positions)
+    )
+    pseudo_beta = jnp.where(
+        jnp.tile(is_gly[..., None], [1] * len(is_gly.shape) + [3]),
+        ca_pos, cb_pos)
+    return pseudo_beta
+
 class AlphaFoldModel(hk.Module):
     def __init__(self, config, name="alphafold"):
         super().__init__(name=name)
@@ -32,9 +59,25 @@ class AlphaFoldModel(hk.Module):
         self.global_config = config.global_config
 
     def __call__(self, batch):
+        """Runs AlphaFold on a batch of input data.
+        
+        Args:
+            batch (Dict[str, ndarray]): Dictionary of input data to AlphaFold. 
+
+        Returns:
+            A dictionary of output values containing the
+            predicted structure information (["structure"]["all_atom_positions"]),
+            as well as confidence values.
+        """
         impl = AlphaFoldIteration(self.config, self.global_config)
         batch_size, num_residues = batch['aatype'].shape
 
+        # get data for recycling from the previous
+        # iteration of AlphaFold. This includes
+        # the previous position "prev_pos",
+        # the previous MSA embedding for the
+        # input sequence "prev_msa_first_row",
+        # and the previous pair embedding "prev_pair"
         def get_prev(ret):
             new_prev = {
                 'prev_pos':
@@ -42,11 +85,9 @@ class AlphaFoldModel(hk.Module):
                 'prev_msa_first_row': ret['representations']['msa_first_row'],
                 'prev_pair': ret['representations']['pair'],
             }
-
-            # if 'initial_guess' in batch:
-            #     new_prev['prev_pos'] = batch['initial_guess']
             return jax.tree_map(jax.lax.stop_gradient, new_prev)
 
+        # run a single iteration of AlphaFold with recycling
         def do_call(prev,
                     recycle_idx):
             if self.config.resample_msa_in_recycling:
@@ -68,11 +109,15 @@ class AlphaFoldModel(hk.Module):
                 compute_loss=False,
                 ensemble_representations=False)
 
+        # initialise recycling data (prev)
         prev = {}
         emb_config = self.config.embeddings_and_evoformer
         if emb_config.recycle_pos:
             prev['prev_pos'] = jnp.zeros(
                 [num_residues, residue_constants.atom_type_num, 3])
+            # if we provide an initial guess of the structure,
+            # initialise the recycling position input "prev_pos"
+            # with that guess
             if 'initial_guess' in batch:
                 prev['prev_pos'] = batch['initial_guess']
         if emb_config.recycle_features:
@@ -81,6 +126,8 @@ class AlphaFoldModel(hk.Module):
             prev['prev_pair'] = jnp.zeros(
                 [num_residues, num_residues, emb_config.pair_channel])
 
+        # run num_recycle iterations of AlphaFold
+        # on the input sequence
         num_iter = self.config.num_recycle
         body = lambda x: (x[0] + 1,  # pylint: disable=g-long-lambda
                           get_prev(do_call(x[1], recycle_idx=x[0])))
@@ -409,7 +456,7 @@ def make_af_features(sequence, structure, offset=200, templated=None):
     }
 
 def encode_sequence(sequence):
-    return jax.nn.one_hot(jnp.array([residue_constants.restypes.index(c) for c in sequence]), 20, axis=-1)
+    return jax.nn.one_hot(jnp.array([residue_constants.restypes.index(c) if c in residue_constants.restypes else 0 for c in sequence]), 20, axis=-1)
 
 def make_sequence_feat(sequences):
     raw_sequence = jnp.concatenate(sequences, axis=1)
@@ -481,14 +528,18 @@ def make_template_features(sequences, structure, templated=None):
             for idx, seq in enumerate(sequences)            
         ], axis=1)[None]
         all_sequence = jnp.concatenate(sequences, axis=1)
-        # aatype.append(jnp.zeros_like(all_sequence)[None])
-        # aatype = jnp.concatenate(aatype, axis=1)
         all_atom, all_atom_mask = (
             structure,
             make_atom14_masks([jax.nn.one_hot(s, 20, axis=-1) for s in sequences])["atom37_atom_exists"],
         )
+        # NOTE: when the template structure does not contain Cb atoms,
+        # add Cb positions retroactively. Otherwise AlphaFold is unable
+        # to properly use the template structure
+        all_atom = jnp.array(all_atom)
+        all_atom = all_atom.at[..., residue_constants.atom_order["CB"], :].set(compute_pseudo_cb(all_atom))
+        all_atom_mask = all_atom_mask.at[..., residue_constants.atom_order["CB"]].set(1)
         all_atom_mask *= templated_mask[:, :, None]
-        cb_coordinates = pseudo_beta_fn(aatype, all_atom, None)
+        cb_coordinates = pseudo_beta_fn(aatype, all_atom, all_atom_mask)
         template_all_atom_positions.append(all_atom[None, None])
         template_all_atom_mask.append(all_atom_mask[None])
         template_pseudo_beta.append(cb_coordinates)
@@ -501,7 +552,6 @@ def make_template_features(sequences, structure, templated=None):
         template_pseudo_beta = jnp.concatenate(template_pseudo_beta, axis=1)
         template_pseudo_beta_mask = jnp.concatenate(template_pseudo_beta_mask, axis=1)
         template_mask = jnp.ones((1, 1))
-    
     result = dict(
         template_all_atom_positions=template_all_atom_positions,
         template_all_atom_masks=template_all_atom_mask,
