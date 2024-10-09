@@ -24,6 +24,26 @@ AF_MODELS = {
 }
 MODEL_TYPES = dict(esm="esmfold_v1", **AF_MODELS)
 
+def remove_missing(fasta_files: List[str],
+                   pdb_files: List[str]) -> Tuple[List[str], List[str]]:
+    fasta_basenames = []
+    pdb_basenames = []
+    fasta_ending = fasta_files[0].split(".")[-1]
+    pdb_ending = pdb_files[0].split(".")[-1]
+    for name in fasta_files:
+        basename = ".".join(name.split(".")[:-1])
+        fasta_basenames.append(basename)
+    for name in pdb_files:
+        basename = ".".join(name.split(".")[:-1])
+        pdb_basenames.append(basename)
+    basenames = sorted(list(set(fasta_basenames) & set(pdb_basenames)))
+    new_fasta_files = []
+    new_pdb_files = []
+    for name in basenames:
+        new_fasta_files.append(f"{name}.{fasta_ending}")
+        new_pdb_files.append(f"{name}.{pdb_ending}")
+    return new_fasta_files, new_pdb_files
+
 def runner(iterator,
            #names: List[str],
            #sequences: List[str],
@@ -80,6 +100,7 @@ def prepare_data(pdb_path: str,
             yield name, 0, sequence, residue_index, structure
     else:
         fasta_files = listdir_nohidden(fasta_path, extensions=("fa", "fasta"))
+        fasta_files, pdb_files = remove_missing(fasta_files, pdb_files)
         if select_state is not None:
             assert all([".".join(x.split(".")[:-1]) == ".".join(y.split(".")[:-2]) for x, y in zip(fasta_files, pdb_files)])
         else:
