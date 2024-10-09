@@ -39,7 +39,7 @@ def compute_scores_permuted(predicted, structure, chain_index, mask=None):
             tm = new_tm
     return rmsd, tm
     
-def permute(structure: np.ndarray[np.float32], mask, chain_index: np.ndarray[np.int32]):
+def permute(structure: np.ndarray, mask, chain_index: np.ndarray):
     unique, count = np.unique(chain_index, return_counts=True)
     start_end = np.cumsum(np.concatenate((np.array([0], dtype=np.int32), count), axis=0), axis=0)
     start = start_end[:-1]
