@@ -112,7 +112,7 @@ def prepare_data(pdb_path: str,
             structure, _, residue_index, chain_index = read_pdb(pdb)
             sequences = read_fasta(fasta)
             for index, sequence in enumerate(sequences):
-                sequence = sequence.replace(":", "")
+                sequence = sequence.replace(":", "").replace("/", "")
                 if section_spec is not None:
                     select_state = select_state if select_state is not None else 0
                     sequence = expand_sequence(sequence, section_spec)[select_state]
