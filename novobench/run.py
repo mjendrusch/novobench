@@ -76,6 +76,7 @@ def prepare_data(pdb_path: str,
                  select_state: Optional[int] = None,
                  section_spec = None,
                  homomer: Optional[int] = 1,
+                 filter_name: Optional[str] = "none",
                  slice_pdb: Optional[str] = "none") -> Tuple[str, str, np.ndarray]:
     slice_pdb = parse_slice(slice_pdb)
     pdb_files = listdir_nohidden(pdb_path, extensions=("pdb", "pdb1"))
@@ -100,6 +101,8 @@ def prepare_data(pdb_path: str,
             yield name, 0, sequence, residue_index, structure
     else:
         fasta_files = listdir_nohidden(fasta_path, extensions=("fa", "fasta"))
+        if filter_name != "none":
+            fasta_files = [i for i in fasta_files if filter_name in i]
         fasta_files, pdb_files = remove_missing(fasta_files, pdb_files)
         if select_state is not None:
             assert all([".".join(x.split(".")[:-1]) == ".".join(y.split(".")[:-2]) for x, y in zip(fasta_files, pdb_files)])
@@ -240,6 +243,7 @@ if __name__ == "__main__":
         model_type="esm",
         num_recycles=4,
         prediction_mode="abinitio",
+        filter_name="none",
         templated="none"
     )
     select_state = None if opt.select_state == "none" else int(opt.select_state)
@@ -249,6 +253,7 @@ if __name__ == "__main__":
                                             fasta_suffix=opt.fasta_suffix,
                                             select_state=select_state,
                                             section_spec=parse_section_spec(opt.section_spec),
+                                            filter_name=opt.filter_name,
                                             homomer=opt.homomer),
                                model_type=opt.model_type,
                                parameter_path=opt.parameter_path,
