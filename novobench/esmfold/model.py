@@ -15,13 +15,13 @@ class ESMScore:
         self.model.eval()
         self.model.cuda()
 
-    def __call__(self, sequence, structure, residue_index, initial_guess=False, templated=None, mask_loops=True, num_recycles=4):
+    def __call__(self, sequence, structure, residue_index, initial_guess=False, templated=None, mask=None, mask_loops=True, num_recycles=4):
         output = self.model.infer(sequence, num_recycles=num_recycles, chain_linker="")
         predicted = atom14_to_atom37(output["positions"][-1], output).to("cpu").numpy()
         predicted = predicted[0]
         output = {k: v.to("cpu").numpy() for k, v in output.items()}
         output["positions"] = predicted
-        mask = None
+        mask = mask
         if mask_loops:
             structured = (dssp_assign(predicted[:, :4])[..., :2] > 0).any(axis=-1)
             mask = structured
