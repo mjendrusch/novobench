@@ -5,7 +5,6 @@
 
 from argparse import ArgumentParser
 from collections import defaultdict
-import sys
 import os
 
 from typing import List, Optional, Tuple
@@ -14,10 +13,6 @@ import numpy as np
 
 from alphafold.common.residue_constants import restypes
 from alphafold.common.protein import from_pdb_string, to_pdb, Protein
-
-import Bio
-import Bio.PDB
-import Bio.PDB.PDBExceptions
 
 from novobench.utils import listdir_nohidden
 
@@ -29,30 +24,7 @@ AF_MODELS = {
 }
 MODEL_TYPES = dict(esm="esmfold_v1", **AF_MODELS)
 
-def remove_missing(fasta_files: List[str],
-                   pdb_files: List[str]) -> Tuple[List[str], List[str]]:
-    fasta_basenames = []
-    pdb_basenames = []
-    fasta_ending = fasta_files[0].split(".")[-1]
-    pdb_ending = pdb_files[0].split(".")[-1]
-    for name in fasta_files:
-        basename = ".".join(name.split(".")[:-1])
-        fasta_basenames.append(basename)
-    for name in pdb_files:
-        basename = ".".join(name.split(".")[:-1])
-        pdb_basenames.append(basename)
-    basenames = sorted(list(set(fasta_basenames) & set(pdb_basenames)))
-    new_fasta_files = []
-    new_pdb_files = []
-    for name in basenames:
-        new_fasta_files.append(f"{name}.{fasta_ending}")
-        new_pdb_files.append(f"{name}.{pdb_ending}")
-    return new_fasta_files, new_pdb_files
-
 def runner(iterator,
-           #names: List[str],
-           #sequences: List[str],
-           #structures: List[np.ndarray[np.float32]],
            model_type: Optional[str] = "esm",
            prediction_mode: Optional[str] = "abinitio",
            templated: Optional[List[int]] = None,
@@ -67,7 +39,6 @@ def runner(iterator,
     else:
         raise ValueError(f"Invalid model type. Given {model_type} but expected one of {MODEL_TYPES}.")
     for name, index, sequence, residue_index, structure in iterator:
-        print(sequence, residue_index.shape, structure.shape)
         scores = model(sequence, structure, residue_index,
                        initial_guess=prediction_mode == "guess",
                        templated=templated,
@@ -75,65 +46,21 @@ def runner(iterator,
         scores.update(name=name, index=index, sequence=sequence)
         yield scores
 
-def prepare_data(pdb_path: str,
-                 fasta_path: str,
+def prepare_data(pdb: str,
+                 fasta: str,
                  fasta_prefix: Optional[str] = "",
                  fasta_suffix: Optional[str] = "",
-                 select_state: Optional[int] = None,
-                 section_spec = None,
                  homomer: Optional[int] = 1,
-                 filter_name: Optional[str] = "none",
                  slice_pdb: Optional[str] = "none") -> Tuple[str, str, np.ndarray]:
     slice_pdb = parse_slice(slice_pdb)
-    pdb_files = listdir_nohidden(pdb_path, extensions=("pdb", "pdb1"))
-    # if we're selecting a state, that means that multi-state PDBs
-    # are enabled, i.e. we're dealing with a multi-state design problem.
-    # therefore, we will split pdb_files into 3 lists where each list
-    # corresponds to PDB-files for a single state
-    if select_state is not None:
-        tmp_pdb_files = pdb_files
-        pdb_files = []
-        for name in tmp_pdb_files:
-            state = int(name.split(".")[-2])
-            if state == select_state:
-                pdb_files.append(name)
-            pdb_files = sorted(pdb_files)
-    if fasta_path == "none":
-        for pdb in pdb_files:
-            name = ".".join(pdb.split(".")[:-1])
-            structure, aatype, residue_index, chain_index = read_pdb(os.path.join(pdb_path, pdb))
-            sequence = "".join([restypes[aa] for aa in aatype])
-            sequence = chain_sequence(sequence, chain_index)
-            yield name, 0, sequence, residue_index, structure
-    else:
-        fasta_files = listdir_nohidden(fasta_path, extensions=("fa", "fasta"))
-        if filter_name != "none":
-            fasta_files = [i for i in fasta_files if filter_name in i]
-        fasta_files, pdb_files = remove_missing(fasta_files, pdb_files)
-        if select_state is not None:
-            assert all([".".join(x.split(".")[:-1]) == ".".join(y.split(".")[:-2]) for x, y in zip(fasta_files, pdb_files)])
-        else:
-            assert all([".".join(x.split(".")[:-1]) == ".".join(y.split(".")[:-1]) for x, y in zip(fasta_files, pdb_files)])
-        for pdb, fasta in zip(pdb_files, fasta_files):
-            name = ".".join(pdb.split(".")[:-1])
-            pdb = os.path.join(pdb_path, pdb)
-            fasta = os.path.join(fasta_path, fasta)
-            try:
-                structure, _, residue_index, chain_index = read_pdb(pdb)
-            except Bio.PDB.PDBExceptions.PDBConstructionException:
-                print("Skipped bad PDB", pdb, file=sys.stderr)
-                continue
-            print("STRUCSHAPE", structure.shape)
-            sequences = read_fasta(fasta)
-            for index, sequence in enumerate(sequences):
-                sequence = sequence.replace(":", "").replace("/", "")
-                if section_spec is not None:
-                    select_state = select_state if select_state is not None else 0
-                    sequence = expand_sequence(sequence, section_spec)[select_state]
-                else:
-                    sequence = fasta_prefix + sequence * homomer + fasta_suffix
-                    sequence = chain_sequence(sequence, chain_index)
-                yield name, index, sequence, residue_index, structure
+    name = ".".join(pdb.split(".")[:-1])
+    structure, _, residue_index, chain_index = read_pdb(pdb)
+    sequences = read_alphalog(fasta)
+    for index, sequence in enumerate(sequences):
+        sequence = sequence.replace(":", "")
+        sequence = fasta_prefix + sequence * homomer + fasta_suffix
+        sequence = chain_sequence(sequence, chain_index)
+        yield name, index, sequence, residue_index, structure
 
 def expand_sequence(sequence, section_spec):
     return [
@@ -167,6 +94,18 @@ def read_fasta(fasta_path):
             except StopIteration:
                 break
 
+def read_alphalog(path):
+    with open(path) as f:
+        for index, line in enumerate(f):
+            sequence, score, _ = line.strip().split(",")
+            yield sequence.strip()
+
+def read_alphalog_scores(path):
+    with open(path) as f:
+        for index, line in enumerate(f):
+            sequence, score, _ = line.strip().split(",")
+            yield float(score)
+
 def parse_slice(slice_str: str) -> slice:
     if slice_str == "none":
         return slice(None)
@@ -180,15 +119,16 @@ def parse_slice(slice_str: str) -> slice:
         position += 1
     return slice(*result)
 
-def write_result_stream(path, scores):
-    os.makedirs(f"{path}/predictions/", exist_ok=True)
+def write_result_stream(path, scores, logfile):
+    os.makedirs(f"{path}/steps/", exist_ok=True)
     with open(f"{path}/scores.csv", "w") as f:
-        f.write("name,index,sequence,sc_rmsd,sc_tm,plddt,ptm,pae,ipae,mpae\n")
-        for item in scores:
-            os.makedirs(f"{path}/predictions/{item['name']}/", exist_ok=True)
-            f.write(f"{item['name']},{item['index']},{item['sequence']},{item['sc_rmsd']},{item['sc_tm']},{item['plddt']},{item['ptm']},{item['pae']},{item['ipae']},{item['mpae']}\n")
+        f.write("iteration,rank,fitness,plddt,ptm,pae,ipae,mpae\n")
+        for idx, (item, fitness) in enumerate(zip(scores, read_alphalog_scores(logfile))):
+            iteration = idx // 10
+            rank = idx % 10
+            f.write(f"{iteration},{rank},{fitness},{item['plddt']},{item['ptm']},{item['pae']},{item['ipae']},{item['mpae']}\n")
             f.flush()
-            write_pdb(f"{path}/predictions/{item['name']}/design_{item['index']}.pdb", item['output'])
+            write_pdb(f"{path}/steps/snapshot_{iteration}_{rank}.pdb", item['output'])
 
 def write_pdb(path, outputs):
     protein = Protein(
@@ -229,8 +169,6 @@ def run_colab(out_path, pdb_path, fasta_path, parameter_path, num_recycles=4):
                         runner(prepare_data(pdb_path, fasta_path,
                                             fasta_prefix="",
                                             fasta_suffix="",
-                                            select_state=None,
-                                            section_spec=parse_section_spec("none"),
                                             homomer=1),
                                model_type="af_1",
                                parameter_path=parameter_path,
@@ -241,8 +179,8 @@ def run_colab(out_path, pdb_path, fasta_path, parameter_path, num_recycles=4):
 if __name__ == "__main__":
     opt = parse_options(
         "Evaluate protein design models with self-consistence under structure prediction.",
-        pdb_path="pdb/",
-        fasta_path="none",
+        pdb_path="pseudo.pdb",
+        log_path="full_log",
         parameter_path="parameters/",
         fasta_prefix="",
         fasta_suffix="",
@@ -254,20 +192,16 @@ if __name__ == "__main__":
         model_type="esm",
         num_recycles=4,
         prediction_mode="abinitio",
-        filter_name="none",
         templated="none"
     )
-    select_state = None if opt.select_state == "none" else int(opt.select_state)
     write_result_stream(opt.out_path,
-                        runner(prepare_data(opt.pdb_path, opt.fasta_path,
+                        runner(prepare_data(opt.pdb_path, opt.log_path,
                                             fasta_prefix=opt.fasta_prefix,
                                             fasta_suffix=opt.fasta_suffix,
-                                            select_state=select_state,
-                                            section_spec=parse_section_spec(opt.section_spec),
-                                            filter_name=opt.filter_name,
                                             homomer=opt.homomer),
                                model_type=opt.model_type,
                                parameter_path=opt.parameter_path,
                                prediction_mode=opt.prediction_mode,
                                templated=parse_templated(opt.templated),
-                               num_recycles=opt.num_recycles))
+                               num_recycles=opt.num_recycles),
+                        opt.log_path)

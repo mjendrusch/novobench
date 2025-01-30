@@ -13,6 +13,7 @@ class ESMScore:
     def __init__(self):
         self.model = esm.pretrained.esmfold_v1()
         self.model.eval()
+        self.model.set_chunk_size(128)
         self.model.cuda()
 
     def __call__(self, sequence, structure, residue_index, initial_guess=False, templated=None, mask=None, mask_loops=True, num_recycles=4):

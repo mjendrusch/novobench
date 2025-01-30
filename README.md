@@ -5,33 +5,35 @@ using AlphaFold2 and ESMfold following [1]. Given a set of designed protein
 backbones and corresponding FASTA-format sequences, it predicts the structures
 of each sequence and compares them to the designed backbone.
 
-### dependencies
-Before installing novobench, make sure you have the following installed:
-* GCC or clang
-* CUDA version 11.3 or later
-in case your machine / cluster is set up with a module system, you will probably be able to get these using
-```bash
-module load GCC
-module load CUDA
-```
+### Installation
 
-### installation
-First, make sure `conda` is installed and create a conda environment:
+Create a fresh virtual environment with python 3.9 using `conda` or `mamba`:
 ```bash
 conda create -n novobench python=3.9
 conda activate novobench
 ```
-Then, clone this repository and `cd` into it using
+Then, clone this repository and enter it:
 ```bash
 git clone https://github.com/mjendrusch/novobench.git
 cd novobench
 ```
-Finally, install dependencies using
+
+Finally, use `setup.sh` to install novobench and dependencies using
 ```bash
 source setup.sh
 ```
+and download AlphaFold 2 parameters using
+```bash
+bash download_af2_params.sh
+```
 
-### usage
+#### Why is there no nice pyproject.toml or setup.py based installation?
+This boils down to openfold requiring a full CUDA installation and dependency conflicts between
+`novobench` dependencies. We plan to transition to a cleaner way of installing
+`novobench` in the future, but for now we're going with what works and does not put too much
+of a burden on the user.
+
+### Usage
 `novobench` runs structure predictor benchmarks on a set of protein backbones and corresponding sequences.
 You provide `novobench` with a directory of backbone PDB-files and another directory of corresponding FASTA-files.
 Each PDB-file (e.g. `backbone_0.pdb`) has to have a corresponding FASTA-file (`backbone_0.fa`) with the same base name.
@@ -41,6 +43,29 @@ and compares these predictions with the original design.
 You may choose different structure predictors for benchmarking. Currently, `novobench` supports AlphaFold2 [2] and ESMfold [3].
 Additionally, `novobench` provides multiple options for structure prediction, allowing the use of structural templates,
 as well as initialising structure prediction from a designed structure [1].
+
+The general recipe for checking designability of a directory of PDB files and corresponding fasta files is:
+```bash
+conda activate novobench
+python -m novobench.run \
+  --pdb-path path-to-pdbs/ \
+  --fasta-path path-to-fasta-files/ \
+  --out-path path-to-output/ \
+  --model esm
+```
+using ESMfold and the following using AlphaFold 2 model 1:
+```bash
+conda activate novobench
+python -m novobench.run \
+  --pdb-path path-to-pdbs/ \
+  --fasta-path path-to-fasta-files/ \
+  --out-path path-to-output/ \
+  --model af_1 \
+  --param-path path-to-params/ \
+  --prediction-mode "guess"
+```
+here, `path-to-params/` should contain a subdirectory `params/` which is the result of
+unpacking the AlphaFold 2 parameter archive.
 
 #### outputs
 `novobench` will generate a directory of the following structure:
