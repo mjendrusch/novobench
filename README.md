@@ -48,20 +48,20 @@ The general recipe for checking designability of a directory of PDB files and co
 ```bash
 conda activate novobench
 python -m novobench.run \
-  --pdb-path path-to-pdbs/ \
-  --fasta-path path-to-fasta-files/ \
-  --out-path path-to-output/ \
+  --pdb-path example_input/pdbs/ \
+  --fasta-path example_input/sequences/ \
+  --out-path example_output/esm/ \
   --model esm
 ```
 using ESMfold and the following using AlphaFold 2 model 1:
 ```bash
 conda activate novobench
 python -m novobench.run \
-  --pdb-path path-to-pdbs/ \
-  --fasta-path path-to-fasta-files/ \
-  --out-path path-to-output/ \
+  --pdb-path example_input/pdbs/ \
+  --fasta-path example_input/sequences/ \
+  --out-path example_output/af2/ \
   --model af_1 \
-  --param-path path-to-params/ \
+  --param-path path-to-alphafold-params/ \
   --prediction-mode "guess"
 ```
 here, `path-to-params/` should contain a subdirectory `params/` which is the result of
