@@ -61,11 +61,12 @@ python -m novobench.run \
   --fasta-path example_input/sequences/ \
   --out-path example_output/af2/ \
   --model af_1 \
-  --param-path path-to-alphafold-params/ \
+  --parameter-path ./ \
   --prediction-mode "guess"
 ```
-here, `path-to-params/` should contain a subdirectory `params/` which is the result of
+here, `--parameter-path` points to the novobench directory, which should contain a subdirectory `params/` which is the result of
 unpacking the AlphaFold 2 parameter archive.
+If you have stored your AlphaFold 2 parameters elsewhere, please use the corresponding path instead.
 
 #### outputs
 `novobench` will generate a directory of the following structure:
