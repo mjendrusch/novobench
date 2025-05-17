@@ -69,6 +69,7 @@ run_models() {
             --fasta-path "$FASTA_PATH" \
             --out-path "$model_output" \
             --model "$model_name" \
+            --templated none \
             --prediction-mode "$PREDICTION_MODE" \
             $param_arg
         
